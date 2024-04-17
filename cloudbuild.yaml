@@ -1,0 +1,90 @@
+steps:
+  - name: "us-central1-docker.pkg.dev/cloud-build-pipeline-396819/cloud-build-helper-docker/cloud-build-helper-docker:latest"
+    id: "Clone repo"
+    entrypoint: "bash"
+    args:
+      - "-eEuo"
+      - "pipefail"
+      - "-c"
+      - |-
+        #!/bin/bash
+        source git-clone-and-checkout.sh
+        cloneAndCheckoutBranch "$_GIT_CLONE_URL" "$_GIT_REPOSITORY_NAME" "$_GIT_REF" "$_GIT_HEAD_SHA"
+
+  - name: "us-central1-docker.pkg.dev/cloud-build-pipeline-396819/node20-docker/node20-docker:latest"
+    id: "Run tests and build jar"
+    entrypoint: "bash"
+    dir: "${_GIT_REPOSITORY_NAME}"
+    args:
+      - "-eEuo"
+      - "pipefail"
+      - "-c"
+      - |-
+        #!/bin/bash
+        source bun-install-and-build.sh
+        bunInstallAndBuild "$_REPLY_TOPIC"
+
+  - name: "us-central1-docker.pkg.dev/cloud-build-pipeline-396819/node20-docker/node20-docker:latest"
+    id: "Create artifact registry repository"
+    entrypoint: "bash"
+    dir: "${_GIT_REPOSITORY_NAME}"
+    args:
+      - "-eEuo"
+      - "pipefail"
+      - "-c"
+      - |-
+        #!/bin/bash
+        source create-bun-artifact-repository.sh
+        createBunArtifactRepository "$_REPLY_TOPIC" "$_GIT_REF"
+
+  - name: "us-central1-docker.pkg.dev/cloud-build-pipeline-396819/node20-docker/node20-docker:latest"
+    id: "Build and push docker image"
+    entrypoint: "bash"
+    dir: "${_GIT_REPOSITORY_NAME}"
+    args:
+      - "-eEuo"
+      - "pipefail"
+      - "-c"
+      - |-
+        #!/bin/bash
+        source build-and-push-image.sh
+        buildAndPushImage "$_REPLY_TOPIC" "$_GIT_REF" "$PROJECT_ID" "${BUILD_ID:0:8}"
+    env:
+      - "PROJECT_ID=$PROJECT_ID"
+      - "BUILD_ID=$BUILD_ID"
+
+  - name: "us-central1-docker.pkg.dev/cloud-build-pipeline-396819/cloud-build-helper-docker/cloud-build-helper-docker:latest"
+    id: "Deploy to each environment"
+    entrypoint: "bash"
+    dir: "${_GIT_REPOSITORY_NAME}"
+    args:
+      - "-eEuo"
+      - "pipefail"
+      - "-c"
+      - |-
+        #!/bin/bash
+        source trigger-deploy-pipelines.sh
+        triggerDeployPipelines "$_GIT_REF" "$PROJECT_ID" "${BUILD_ID:0:8}" "600" "$_REPLY_TOPIC"
+    env:
+      - "PROJECT_ID=$PROJECT_ID"
+      - "BUILD_ID=$BUILD_ID"
+
+  - name: "us-central1-docker.pkg.dev/cloud-build-pipeline-396819/cloud-build-helper-docker/cloud-build-helper-docker:latest"
+    id: "Reply back to pipeline"
+    entrypoint: "bash"
+    args:
+      - "-eEuo"
+      - "pipefail"
+      - "-c"
+      - |-
+        #!/bin/bash
+        source send-message.sh
+        sendMessage "$_REPLY_TOPIC" "Pipeline succeeded."
+options:
+  substitutionOption: "ALLOW_LOOSE"
+substitutions:
+  _GIT_CLONE_URL: $(body.message.data.git.clone_url)
+  _GIT_REPOSITORY_NAME: $(body.message.data.git.name)
+  _GIT_REF: $(body.message.data.git.ref)
+  _GIT_HEAD_SHA: $(body.message.data.git.head_sha)
+  _REPLY_TOPIC: $(body.message.data.reply_topic)
