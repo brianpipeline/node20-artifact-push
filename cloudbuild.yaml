@@ -12,7 +12,7 @@ steps:
         cloneAndCheckoutBranch "$_GIT_CLONE_URL" "$_GIT_REPOSITORY_NAME" "$_GIT_REF" "$_GIT_HEAD_SHA"
 
   - name: "us-central1-docker.pkg.dev/cloud-build-pipeline-396819/node20-docker/node20-docker:latest"
-    id: "Run tests and build jar"
+    id: "Install test and build application"
     entrypoint: "bash"
     dir: "${_GIT_REPOSITORY_NAME}"
     args:
@@ -21,8 +21,8 @@ steps:
       - "-c"
       - |-
         #!/bin/bash
-        source bun-install-and-build.sh
-        bunInstallAndBuild "$_REPLY_TOPIC"
+        source bun-install-test-and-build.sh
+        bunInstallTestAndBuild "$_REPLY_TOPIC"
 
   - name: "us-central1-docker.pkg.dev/cloud-build-pipeline-396819/node20-docker/node20-docker:latest"
     id: "Create artifact registry repository"
